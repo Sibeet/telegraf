@@ -26,6 +26,8 @@ type Goldilocks struct {
 	User           string           `toml:"goldilocks_user"`
 	Password       string           `toml:"goldilocks_password"`
 	Elements       []MonitorElement `toml:"elements"`
+	Tags           [][]string       `toml:"goldilocks_default_tags"`
+	SeriesPostfix  string           `toml:"goldilocks_series_postfix"`
 }
 
 func init() {
@@ -42,21 +44,8 @@ goldilocks_host = "127.0.0.1"
 goldilocks_port = 37562
 goldilocks_user = "test"
 goldilocks_password = "test"
-
-
-###### DO NOT EDIT : Start  ########################################
-[[ inputs.goldilocks.elements ]]
-series_name = "goldilocks_default_tags"
-sql = """
-
-SELECT
-        Y.GROUP_NAME,
-        X.LOCAL_MEMBER_NAME MEMBER_NAME
-FROM X$INSTANCE@LOCAL X INNER JOIN CLUSTER_GROUP@LOCAL Y ON X.LOCAL_GROUP_ID = Y.GROUP_ID;
-
-"""
-###### DO NOT EDIT : End   ########################################
-
+goldilocks_series_postfix = ""
+goldilocks_default_tags = [["GROUP", "G1"], ["MEMBER", "G1N1"]]
 
 [[ inputs.goldilocks.elements]]
 series_name="session_stat"
@@ -73,22 +62,6 @@ fields = ["CNT"]
 pivot = false
 
 [[ inputs.goldilocks.elements ]]
-series_name = "goldilocks_statement_stat"
-sql = """
-SELECT COUNT(*) TOTAL_COUNT,
-       SUM(CASE WHEN X.ELAPSED > 5 THEN 1 ELSE 0 END ) LONG_RUNNING_COUNT
-FROM
-(
- SELECT
-       DATEDIFF ( SECOND, START_TIME, SYSTIMESTAMP  ) ELAPSED
- FROM V$STATEMENT
-) X
-"""
-tags = []
-fields = ["TOTAL_COUNT", "LONG_RUNNING_COUNT"]
-pivot = false
-
-[[ inputs.goldilocks.elements ]]
 
 series_name = "goldilocks_sql_execution_stat"
 sql = """
@@ -101,78 +74,6 @@ tags = []
 fields = ["VALUE"]
 pivot_key = "STAT_NAME"
 pivot = true
-
-[[ inputs.goldilocks.elements ]]
-series_name = "goldilocks_transaction_stat"
-sql = """
-SELECT
- (SELECT COUNT(*) FROM V$TRANSACTION) ACTIVE_TRANSACTIONS,
- (SELECT COUNT(*) FROM V$LOCK_WAIT) WAIT_TRANSACTIONS
-FROM DUAL ;
-"""
-
-tags = []
-fields = ["ACTIVE_TRANSACTIONS", "WAIT_TRANSACTIONS"]
-pivot_key = ""
-pivot = false
-
-[[ inputs.goldilocks.elements ]]
-series_name = "goldilocks_cluster_net_stat"
-sql = """
-SELECT DECODE(IS_SYNC,FALSE, 'SYNC', 'ASYNC' ) TYPE ,
-        SUM(RX_BYTES) RX_BYTES,
-        SUM(TX_BYTES) TX_BYTES,
-        SUM(RX_JOBS) RX_JOBS,
-        SUM(TX_JOBS) TX_JOBS
- FROM X$CLUSTER_DISPATCHER@LOCAL
- GROUP BY IS_SYNC
-"""
-tags = ["TYPE"]
-fields = ["RX_BYTES", "TX_BYTES", "RX_JOBS", "TX_JOBS"]
-pivot_key = ""
-pivot = false
-
-
-[[ inputs.goldilocks.elements ]]
-series_name = "goldilocks_tablespaces"
-sql = """
-SELECT X.NAME, 
-       X.TOTAL TOTAL_BYTES, 
-       X.PAGE_SIZE * NVL ( Y.PAGE_COUNT, 0)  USED_BYTES, 
-       ROUND ( X.PAGE_SIZE * NVL ( Y.PAGE_COUNT, 0) * 100  / X.TOTAL , 2 ) USED_PCT    
-  FROM (
-       SELECT TABLESPACE_ID ID
-            , NAME
-            , SUM(SIZE) TOTAL
-            , PAGE_SIZE
-         FROM X$DATAFILE@LOCAL XX INNER JOIN X$TABLESPACE@LOCAL YY ON XX.TABLESPACE_ID = YY.ID
-        WHERE XX.STATE != 'DROPPED'
-        GROUP BY TABLESPACE_ID, NAME, PAGE_SIZE
-     ) X LEFT OUTER JOIN (
-       SELECT 1 TBS_ID
-            , SUM(CASE WHEN REAL_COUNT < PROP_VALUE THEN PROP_VALUE ELSE REAL_COUNT END) PAGE_COUNT
-         FROM (
-              SELECT ALLOC_PAGE_COUNT - AGABLE_PAGE_COUNT REAL_COUNT
-                   , (
-                     SELECT TO_NUMBER(PROPERTY_VALUE)
-                       FROM V$PROPERTY
-                      WHERE PROPERTY_NAME = 'MINIMUM_UNDO_PAGE_COUNT'
-                   ) PROP_VALUE
-                FROM X$UNDO_SEGMENT@LOCAL
-            )
-        UNION ALL
-       SELECT TBS_ID
-            , SUM(ALLOC_PAGE_COUNT) ALLOC
-         FROM X$SEGMENT@LOCAL
-        WHERE TBS_ID != 1
-        GROUP BY TBS_ID
-     ) Y ON X.ID = Y.TBS_ID 
-"""
-tags = ["NAME"]
-fields = ["TOTAL_BYTES", "USED_BYTES", "USED_PCT"]
-pivot_key = ""
-pivot = false
-
 
 `
 
@@ -221,19 +122,10 @@ func (m *Goldilocks) Gather(acc telegraf.Accumulator) error {
 func (m *Goldilocks) getCommonTags(db *sql.DB) map[string]string {
 
 	v := make(map[string]string)
-	for _, element := range m.Elements {
 
-		if element.SeriesName == "goldilocks_default_tags" {
-			q, err := m.getSQLResult(db, element.Sql)
-			if err != nil {
-				return nil
-			}
+	for _, arrString := range m.Tags {
 
-			for k, _ := range q[0] {
-				v[k] = q[0][k].(string)
-			}
-			break
-		}
+		v[arrString[0]] = arrString[1]
 	}
 
 	return v
@@ -244,10 +136,6 @@ func (m *Goldilocks) runSQL(acc telegraf.Accumulator, db *sql.DB) error {
 	for _, element := range m.Elements {
 		tags := m.getCommonTags(db)
 		fields := make(map[string]interface{})
-
-		if element.SeriesName == "goldilocks_default_tags" {
-			continue
-		}
 
 		r, err := m.getSQLResult(db, element.Sql)
 		if err != nil {
