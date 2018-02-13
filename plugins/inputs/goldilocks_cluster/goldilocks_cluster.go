@@ -12,22 +12,22 @@ import (
 )
 
 type MonitorElement struct {
-	Sql        string   `toml:"sql"`
-	Tags       []string `toml:"tags"`
-	Fields     []string `toml:"fields"`
-	Pivot      bool     `toml:"pivot"`
-	PivotKey   string   `toml:"pivot_key"`
-	SeriesName string   `toml:"series_name"`
+	Sql        string
+	Tags       []string
+	Fields     []string
+	Pivot      bool
+	PivotKey   string
+	SeriesName string
 }
+
 type Goldilocks struct {
-	OdbcDriverPath string           `toml:"goldilocks_odbc_driver_path"`
-	Host           string           `toml:"goldilocks_host"`
-	Port           int              `toml:"goldilocks_port"`
-	User           string           `toml:"goldilocks_user"`
-	Password       string           `toml:"goldilocks_password"`
-	Elements       []MonitorElement `toml:"elements"`
-	Tags           [][]string       `toml:"goldilocks_default_tags"`
-	SeriesPostfix  string           `toml:"goldilocks_series_postfix"`
+	OdbcDriverPath string `toml:"goldilocks_odbc_driver_path"`
+	Host           string `toml:"goldilocks_host"`
+	Port           int    `toml:"goldilocks_port"`
+	User           string `toml:"goldilocks_user"`
+	Password       string `toml:"goldilocks_password"`
+	AddPostfix     bool   `toml:"goldilocks_add_group_postfix_to_series_name"`
+	Elements       []MonitorElement
 }
 
 func init() {
@@ -37,44 +37,12 @@ func init() {
 }
 
 var sampleConfig = `
-
 ## specify connection string
 goldilocks_odbc_driver_path = "?/lib/libgoldilockscs-ul64.so" 
 goldilocks_host = "127.0.0.1" 
 goldilocks_port = 37562
 goldilocks_user = "test"
 goldilocks_password = "test"
-goldilocks_series_postfix = ""
-goldilocks_default_tags = [["GROUP", "G1"], ["MEMBER", "G1N1"]]
-
-[[ inputs.goldilocks.elements]]
-series_name="session_stat"
-sql = """
-SELECT NVL( CLIENT_ADDRESS, 'DA') CLIENT_ADDRESS,
-       COUNT(*) CNT
-FROM V$SESSION
-WHERE USER_NAME IS NOT NULL
-AND   PROGRAM_NAME != 'gmaster'
-GROUP BY CLIENT_ADDRESS
-"""
-tags = ["CLIENT_ADDRESS"]
-fields = ["CNT"]
-pivot = false
-
-[[ inputs.goldilocks.elements ]]
-
-series_name = "goldilocks_sql_execution_stat"
-sql = """
-
-SELECT STAT_NAME , CAST ( STAT_VALUE AS NATIVE_BIGINT )  VALUE
-FROM   V$SYSTEM_SQL_STAT;
-
-"""
-tags = []
-fields = ["VALUE"]
-pivot_key = "STAT_NAME"
-pivot = true
-
 `
 
 func (m *Goldilocks) BuildConnectionString() string {
@@ -119,22 +87,41 @@ func (m *Goldilocks) Gather(acc telegraf.Accumulator) error {
 	return nil
 }
 
-func (m *Goldilocks) getCommonTags(db *sql.DB) map[string]string {
+func (m *Goldilocks) runSQL(acc telegraf.Accumulator, db *sql.DB, clusterMode int) error {
 
-	v := make(map[string]string)
+	sHasPrefix := false
 
-	for _, arrString := range m.Tags {
+	tags := make(map[string]string)
 
-		v[arrString[0]] = arrString[1]
+	sSeriesName := ""
+	member, group, err := m.getMyGroupInfo(db)
+
+	if err != nil {
+		return err
 	}
 
-	return v
-}
+	switch clusterMode {
 
-func (m *Goldilocks) runSQL(acc telegraf.Accumulator, db *sql.DB) error {
+	case 0:
+		sHasPrefix = false
+
+	case 1:
+		tags["GROUP"] = member
+		tags["MEMBER"] = group
+		sHasPrefix = false
+
+	case 2:
+		sHasPrefix = true
+	}
 
 	for _, element := range m.Elements {
-		tags := m.getCommonTags(db)
+
+		if sHasPrefix {
+			sSeriesName = element.SeriesName + "_" + member
+		} else {
+			sSeriesName = element.SeriesName
+		}
+
 		fields := make(map[string]interface{})
 
 		r, err := m.getSQLResult(db, element.Sql)
@@ -153,19 +140,21 @@ func (m *Goldilocks) runSQL(acc telegraf.Accumulator, db *sql.DB) error {
 				data := v[element.Fields[0]]
 				fields[key] = data
 			}
-			acc.AddFields(element.SeriesName, fields, tags)
+
+			acc.AddFields(sSeriesName, fields, tags)
 
 		} else {
 
 			for _, v := range r {
 				for _, v2 := range element.Tags {
+
 					tags[v2] = v[v2].(string)
 				}
 
 				for _, v2 := range element.Fields {
 					fields[v2] = v[v2]
 				}
-				acc.AddFields(element.SeriesName, fields, tags)
+				acc.AddFields(sSeriesName, fields, tags)
 
 			}
 		}
@@ -216,6 +205,127 @@ func (m *Goldilocks) getSQLResult(db *sql.DB, sqlText string) ([]map[string]inte
 
 }
 
+func (m *Goldilocks) getConfig(db *sql.DB) error {
+
+	var (
+		sSeriesName string
+		sQuery      string
+		sTags       sql.NullString
+		sFields     sql.NullString
+		sPivotKey   sql.NullString
+		sPivot      int
+	)
+
+	m.Elements = m.Elements[:0]
+
+	metricSQL := "SELECT *  FROM TELEGRAF_METRIC_SETTINGS"
+
+	rows, err := db.Query(metricSQL)
+	if err != nil {
+		return err
+	}
+
+	defer rows.Close()
+
+	for rows.Next() {
+		err := rows.Scan(&sSeriesName, &sQuery, &sTags, &sFields, &sPivotKey, &sPivot)
+		if err != nil {
+			return err
+		}
+		element := MonitorElement{}
+
+		element.SeriesName = sSeriesName
+		element.Sql = sQuery
+
+		if sFields.Valid {
+			element.Fields = strings.Split(sFields.String, "|")
+		} else {
+			element.Fields = nil
+		}
+
+		if sTags.Valid {
+			element.Tags = strings.Split(sTags.String, "|")
+		} else {
+			element.Tags = nil
+		}
+
+		if sPivotKey.Valid {
+			element.PivotKey = sPivotKey.String
+		} else {
+			element.PivotKey = ""
+		}
+
+		if sPivot == 0 {
+			element.Pivot = false
+		} else {
+			element.Pivot = true
+		}
+		m.Elements = append(m.Elements, element)
+	}
+
+	return nil
+}
+
+func (m *Goldilocks) getMyGroupInfo(db *sql.DB) (group, member string, err error) {
+
+	var (
+		sGroupName  string
+		sMemberName string
+	)
+
+	sql := `
+	SELECT
+        Y.GROUP_NAME,
+        X.LOCAL_MEMBER_NAME MEMBER_NAME
+FROM X$INSTANCE@LOCAL X INNER JOIN CLUSTER_GROUP@LOCAL Y ON X.LOCAL_GROUP_ID = Y.GROUP_ID;
+	`
+
+	rows, err := db.Query(sql)
+
+	if err != nil {
+		return "", "", err
+	}
+
+	defer rows.Close()
+
+	for rows.Next() {
+
+		err := rows.Scan(&sGroupName, &sMemberName)
+
+		if err != nil {
+			return "", "", err
+		}
+
+	}
+
+	return sGroupName, sMemberName, nil
+
+}
+
+func (m *Goldilocks) getClusterMode(db *sql.DB) int {
+	var sClusterMode int
+
+	sql := `SELECT SETTING_VALUE FROM TELEGRAF_GLOBAL_SETTINGS WHERE SETTING_KEY='CLUSTER_MODE'`
+	rows, err := db.Query(sql)
+
+	if err != nil {
+		return 0
+	}
+
+	defer rows.Close()
+
+	for rows.Next() {
+
+		err := rows.Scan(&sClusterMode)
+
+		if err != nil {
+			return 0
+		}
+
+	}
+	return sClusterMode
+}
+
 func (m *Goldilocks) gatherServer(serv string, acc telegraf.Accumulator) error {
 
 	db, err := sql.Open("odbc", serv)
@@ -223,7 +333,14 @@ func (m *Goldilocks) gatherServer(serv string, acc telegraf.Accumulator) error {
 		return err
 	}
 
-	err = m.runSQL(acc, db)
+	sClusterMode := m.getClusterMode(db)
+
+	err = m.getConfig(db)
+	if err != nil {
+		return err
+	}
+
+	err = m.runSQL(acc, db, sClusterMode)
 	if err != nil {
 		return err
 	}
