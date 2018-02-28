@@ -133,6 +133,10 @@ func (m *Goldilocks) runSQL(acc telegraf.Accumulator, db *sql.DB, clusterMode in
 
 			for _, v := range r {
 				for _, v2 := range element.Tags {
+					if v2 == "" {
+
+						fmt.Println("Got Error . ", element.SeriesName)
+					}
 					tags[v2] = v[v2].(string)
 				}
 
@@ -148,6 +152,9 @@ func (m *Goldilocks) runSQL(acc telegraf.Accumulator, db *sql.DB, clusterMode in
 			for _, v := range r {
 				for _, v2 := range element.Tags {
 
+					if v2 == "" {
+						fmt.Println("Got Error . ", element.SeriesName)
+					}
 					tags[v2] = v[v2].(string)
 				}
 
