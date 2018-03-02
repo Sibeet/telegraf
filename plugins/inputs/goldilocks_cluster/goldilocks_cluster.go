@@ -339,6 +339,7 @@ func (m *Goldilocks) gatherServer(serv string, acc telegraf.Accumulator) error {
 	if err != nil {
 		return err
 	}
+	defer db.Close()
 
 	sClusterMode := m.getClusterMode(db)
 
@@ -351,8 +352,6 @@ func (m *Goldilocks) gatherServer(serv string, acc telegraf.Accumulator) error {
 	if err != nil {
 		return err
 	}
-
-	defer db.Close()
 
 	return nil
 }
