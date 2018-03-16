@@ -89,38 +89,13 @@ func (m *Goldilocks) Gather(acc telegraf.Accumulator) error {
 
 func (m *Goldilocks) runSQL(acc telegraf.Accumulator, db *sql.DB, clusterMode int) error {
 
-	sHasPrefix := false
-
-	tags := make(map[string]string)
-
 	sSeriesName := ""
-	member, group, err := m.getMyGroupInfo(db)
-
-	if err != nil {
-		return err
-	}
-
-	switch clusterMode {
-
-	case 0:
-		sHasPrefix = false
-
-	case 1:
-		tags["GROUP"] = member
-		tags["MEMBER"] = group
-		sHasPrefix = false
-
-	case 2:
-		sHasPrefix = true
-	}
 
 	for _, element := range m.Elements {
 
-		if sHasPrefix {
-			sSeriesName = element.SeriesName + "_" + member
-		} else {
-			sSeriesName = element.SeriesName
-		}
+		tags := make(map[string]string)
+
+		sSeriesName = element.SeriesName
 
 		fields := make(map[string]interface{})
 
@@ -271,42 +246,6 @@ func (m *Goldilocks) getConfig(db *sql.DB) error {
 	}
 
 	return nil
-}
-
-func (m *Goldilocks) getMyGroupInfo(db *sql.DB) (group, member string, err error) {
-
-	var (
-		sGroupName  string
-		sMemberName string
-	)
-
-	sql := `
-	SELECT
-        Y.GROUP_NAME,
-        X.LOCAL_MEMBER_NAME MEMBER_NAME
-FROM X$INSTANCE@LOCAL X INNER JOIN CLUSTER_GROUP@LOCAL Y ON X.LOCAL_GROUP_ID = Y.GROUP_ID;
-	`
-
-	rows, err := db.Query(sql)
-
-	if err != nil {
-		return "", "", err
-	}
-
-	defer rows.Close()
-
-	for rows.Next() {
-
-		err := rows.Scan(&sGroupName, &sMemberName)
-
-		if err != nil {
-			return "", "", err
-		}
-
-	}
-
-	return sGroupName, sMemberName, nil
-
 }
 
 func (m *Goldilocks) getClusterMode(db *sql.DB) int {

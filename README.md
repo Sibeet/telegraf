@@ -1,300 +1,203 @@
-# Telegraf [![Circle CI](https://circleci.com/gh/influxdata/telegraf.svg?style=svg)](https://circleci.com/gh/influxdata/telegraf) [![Docker pulls](https://img.shields.io/docker/pulls/library/telegraf.svg)](https://hub.docker.com/_/telegraf/)
 
-Telegraf is an agent written in Go for collecting, processing, aggregating,
-and writing metrics.
+## Telegraf fork for Goldilocks Cluster 
 
-Design goals are to have a minimal memory footprint with a plugin system so
-that developers in the community can easily add support for collecting metrics
-from local or remote services.
+telegraf 는 정보를 수집하여 이를 처리하여 저장소로 넘겨서 저장하는 역할을 하는 일종의 Agent 데몬 프로그램이다. 이 저장소는 오리지널 telegraf 프로그램을 fork 한 것으로, Golidlocks DBMS plugin 이 추가된 버젼이다. Goldilocks DBMS 용 Plugin 은 unixODBC 와 의존성이 있기 때문에 오리지널 telegraf 저장소에 추가할 수 없고 그래서 별도의 Fork 를 운영하게 되었다. 
 
-Telegraf is plugin-driven and has the concept of 4 distinct plugins:
+다음은 본 telegraf 로 수집한 metric 을 grafana 로 꾸며본 dashboard 이다. 
 
-1. [Input Plugins](#input-plugins) collect metrics from the system, services, or 3rd party APIs
-2. [Processor Plugins](#processor-plugins) transform, decorate, and/or filter metrics
-3. [Aggregator Plugins](#aggregator-plugins) create aggregate metrics (e.g. mean, min, max, quantiles, etc.)
-4. [Output Plugins](#output-plugins) write metrics to various destinations
+![Dashhboard_Capture](dashboard_capture.jpg)
 
-For more information on Processor and Aggregator plugins please [read this](./docs/AGGREGATORS_AND_PROCESSORS.md).
+Goldilock DBMS 를 telegraf 로 모니터링 하기 위해서는 이 저장소를 clone 하여 telegraf 바이너리를 만들어야한다. 본 문서는 telegraf 를 빌드하고, 수행하고, 설정하는 것에 대해서 설명할 것이다. 
 
-New plugins are designed to be easy to contribute,
-we'll eagerly accept pull
-requests and will manage the set of plugins that Telegraf supports.
 
-## Contributing
 
-There are many ways to contribute:
-- Fix and [report bugs](https://github.com/influxdata/telegraf/issues/new)
-- [Improve documentation](https://github.com/influxdata/telegraf/issues?q=is%3Aopen+label%3Adocumentation)
-- [Review code and feature proposals](https://github.com/influxdata/telegraf/pulls)
-- Answer questions on github and on the [Community Site](https://community.influxdata.com/)
-- [Contribute plugins](CONTRIBUTING.md)
+## 전제조건 
 
-## Installation:
+* UnixODBC ( > 2.3 ) 이 필요하다. : [Get Unixodbc](http://unixodbc.org)
+* Go ( > 1.9 ) 는 빌드하기 위하여 필요하다. : [Get golang](http://golang.org)
 
-You can download the binaries directly from the [downloads](https://www.influxdata.com/downloads) page
-or from the [releases](https://github.com/influxdata/telegraf/releases) section.
 
-### Ansible Role:
+## How to Build 
 
-Ansible role: https://github.com/rossmcdonald/telegraf
-
-### From Source:
-
-Telegraf requires golang version 1.8+, the Makefile requires GNU make.
-
-Dependencies are managed with [gdm](https://github.com/sparrc/gdm),
-which is installed by the Makefile if you don't have it already.
-
-1. [Install Go](https://golang.org/doc/install)
-2. [Setup your GOPATH](https://golang.org/doc/code.html#GOPATH)
-3. Run `go get -d github.com/influxdata/telegraf`
-4. Run `cd $GOPATH/src/github.com/influxdata/telegraf`
-5. Run `make`
-
-### Nightly Builds
-
-These builds are generated from the master branch:
-- [telegraf_nightly_amd64.deb](https://dl.influxdata.com/telegraf/nightlies/telegraf_nightly_amd64.deb)
-- [telegraf_nightly_arm64.deb](https://dl.influxdata.com/telegraf/nightlies/telegraf_nightly_arm64.deb)
-- [telegraf-nightly.arm64.rpm](https://dl.influxdata.com/telegraf/nightlies/telegraf-nightly.arm64.rpm)
-- [telegraf_nightly_armel.deb](https://dl.influxdata.com/telegraf/nightlies/telegraf_nightly_armel.deb)
-- [telegraf-nightly.armel.rpm](https://dl.influxdata.com/telegraf/nightlies/telegraf-nightly.armel.rpm)
-- [telegraf_nightly_armhf.deb](https://dl.influxdata.com/telegraf/nightlies/telegraf_nightly_armhf.deb)
-- [telegraf-nightly.armv6hl.rpm](https://dl.influxdata.com/telegraf/nightlies/telegraf-nightly.armv6hl.rpm)
-- [telegraf-nightly_freebsd_amd64.tar.gz](https://dl.influxdata.com/telegraf/nightlies/telegraf-nightly_freebsd_amd64.tar.gz)
-- [telegraf-nightly_freebsd_i386.tar.gz](https://dl.influxdata.com/telegraf/nightlies/telegraf-nightly_freebsd_i386.tar.gz)
-- [telegraf_nightly_i386.deb](https://dl.influxdata.com/telegraf/nightlies/telegraf_nightly_i386.deb)
-- [telegraf-nightly.i386.rpm](https://dl.influxdata.com/telegraf/nightlies/telegraf-nightly.i386.rpm)
-- [telegraf-nightly_linux_amd64.tar.gz](https://dl.influxdata.com/telegraf/nightlies/telegraf-nightly_linux_amd64.tar.gz)
-- [telegraf-nightly_linux_arm64.tar.gz](https://dl.influxdata.com/telegraf/nightlies/telegraf-nightly_linux_arm64.tar.gz)
-- [telegraf-nightly_linux_armel.tar.gz](https://dl.influxdata.com/telegraf/nightlies/telegraf-nightly_linux_armel.tar.gz)
-- [telegraf-nightly_linux_armhf.tar.gz](https://dl.influxdata.com/telegraf/nightlies/telegraf-nightly_linux_armhf.tar.gz)
-- [telegraf-nightly_linux_i386.tar.gz](https://dl.influxdata.com/telegraf/nightlies/telegraf-nightly_linux_i386.tar.gz)
-- [telegraf-nightly_linux_s390x.tar.gz](https://dl.influxdata.com/telegraf/nightlies/telegraf-nightly_linux_s390x.tar.gz)
-- [telegraf_nightly_s390x.deb](https://dl.influxdata.com/telegraf/nightlies/telegraf_nightly_s390x.deb)
-- [telegraf-nightly.s390x.rpm](https://dl.influxdata.com/telegraf/nightlies/telegraf-nightly.s390x.rpm)
-- [telegraf-nightly_windows_amd64.zip](https://dl.influxdata.com/telegraf/nightlies/telegraf-nightly_windows_amd64.zip)
-- [telegraf-nightly_windows_i386.zip](https://dl.influxdata.com/telegraf/nightlies/telegraf-nightly_windows_i386.zip)
-- [telegraf-nightly.x86_64.rpm](https://dl.influxdata.com/telegraf/nightlies/telegraf-nightly.x86_64.rpm)
-- [telegraf-static-nightly_linux_amd64.tar.gz](https://dl.influxdata.com/telegraf/nightlies/telegraf-static-nightly_linux_amd64.tar.gz)
-
-## How to use it:
-
-See usage with:
+1. golang이 설치되었고 적당한 $GOPATH 환경 변수가 세팅되어있는지 확인한다. 그리고 본 저장소를 통해 check out 받는다. 
 
 ```
-./telegraf --help
+$ go get github.com/ckh0618/telegraf
 ```
 
-#### Generate a telegraf config file:
+2. 부모디렉토리 이름을 ckh0618 이 아니라 influxdata 로 바꾼다. 이는 telegraf 내부 코드에서 internal package 를 import 하기 때문이다. 아래와 같이 바꾸지 않으면 빌드 오류가 발생한다. 
 
 ```
-./telegraf config > telegraf.conf
+$ mv $GOPATH/src/github.com/ckh0618 $GOPATH/src/github.com/influxdata
 ```
-
-#### Generate config with only cpu input & influxdb output plugins defined:
-
-```
-./telegraf --input-filter cpu --output-filter influxdb config
-```
-
-#### Run a single telegraf collection, outputing metrics to stdout:
+3. 빌드한다. 
 
 ```
-./telegraf --config telegraf.conf --test
+$ cd $GOPATH/src/github.com/influxdata/telegraf 
+$ make 
 ```
 
-#### Run telegraf with all plugins defined in config file:
+이대로 바이너리만 배포해도 되긴하지만 unixodbc 와의 의존성 및 설정 파일들때문에 복잡하게 처리를 해야하니 다음과 같이 패키징을 해서 넘기는 게 낫다. 
+
+## 패키징 
+
+위에서 언급했다시피 원래 telegraf 는 의존성이 전혀 없는 프로그램이지만 이 Repository 에 존재하는 telegraf 는 unixODBC 와 의존성이 있어서 배포하는 전 서버에 unixODBC 가 설치되어야 한다. 이러한 문제점을 해결하기 위해서 telegraf 패키지을 의존성을 포함해서 만들게 되면 각각의 서버에 배포할때 간편하게 배포할 수 있다. 
+
+다음은 패키징 구조 예제이다. 
 
 ```
-./telegraf --config telegraf.conf
+.
+├── bin
+│   └── telegraf
+├── conf
+│   └── telegraf.conf
+├── lib
+│   ├── libodbc.la
+│   ├── libodbc.so
+│   ├── libodbc.so.2
+│   ├── libodbc.so.2.0.0
+│   ├── libodbccr.la
+│   ├── libodbccr.so
+│   ├── libodbccr.so.2
+│   ├── libodbccr.so.2.0.0
+│   ├── libodbcinst.la
+│   ├── libodbcinst.so
+│   ├── libodbcinst.so.2
+│   └── libodbcinst.so.2.0.0
+├── log
+│   └── telegraf.log
+├── run_telegraf.sh
+└── sql
+    ├── init.sql
+    └── telegraf_view.sql
 ```
 
-#### Run telegraf, enabling the cpu & memory input, and influxdb output plugins:
+위 디렉토리의 설명은 다음과 같다. 
+
+| 이름  | 설명   |
+|---|---|
+| bin  |  telegraf 바이너리를 가지는 디렉토리 
+| conf |  telegraf.conf 파일을 가지는 디렉토리 | 
+| lib  |  unixODBC Library 들. unixODBC 의 위 파일들을 lib 디렉토리에 위치시킨다 | 
+| log  |  telegraf 가 남기는 로그 파일 | 
+| sql  |  telegraf Goldilocks Plugin 을 수행하기 위한 SQL 모음 | 
+
+telegraf.conf 파일은 다음과 같이 얻을 수 있다. 
 
 ```
-./telegraf --config telegraf.conf --input-filter cpu:mem --output-filter influxdb
+$ telegraf config > telegraf.conf 
 ```
 
 
-## Configuration
+다음은 run_telegraf script 이다. telegraf 가 혹시 비정상종료했는지 감지했다가 비정상종료하면 다시 띄워주는 Shell script 이다. 
 
-See the [configuration guide](docs/CONFIGURATION.md) for a rundown of the more advanced
-configuration options.
+```sh
+#!/bin/bash
+PWD=`pwd`
+export LD_LIBRARY_PATH=$PWD/lib:$LD_LIBRARY_PATH
 
-## Input Plugins
+while [ true ]
+do :
+        PID=`ps -ef | grep telegraf | grep telegraf.conf | grep -v grep | awk '{print $2}'`
 
-* [aerospike](./plugins/inputs/aerospike)
-* [amqp_consumer](./plugins/inputs/amqp_consumer) (rabbitmq)
-* [apache](./plugins/inputs/apache)
-* [aws cloudwatch](./plugins/inputs/cloudwatch)
-* [bcache](./plugins/inputs/bcache)
-* [bond](./plugins/inputs/bond)
-* [cassandra](./plugins/inputs/cassandra)
-* [ceph](./plugins/inputs/ceph)
-* [cgroup](./plugins/inputs/cgroup)
-* [chrony](./plugins/inputs/chrony)
-* [consul](./plugins/inputs/consul)
-* [conntrack](./plugins/inputs/conntrack)
-* [couchbase](./plugins/inputs/couchbase)
-* [couchdb](./plugins/inputs/couchdb)
-* [DC/OS](./plugins/inputs/dcos)
-* [disque](./plugins/inputs/disque)
-* [dmcache](./plugins/inputs/dmcache)
-* [dns query time](./plugins/inputs/dns_query)
-* [docker](./plugins/inputs/docker)
-* [dovecot](./plugins/inputs/dovecot)
-* [elasticsearch](./plugins/inputs/elasticsearch)
-* [exec](./plugins/inputs/exec) (generic executable plugin, support JSON, influx, graphite and nagios)
-* [fail2ban](./plugins/inputs/fail2ban)
-* [filestat](./plugins/inputs/filestat)
-* [fluentd](./plugins/inputs/fluentd)
-* [graylog](./plugins/inputs/graylog)
-* [haproxy](./plugins/inputs/haproxy)
-* [hddtemp](./plugins/inputs/hddtemp)
-* [http_response](./plugins/inputs/http_response)
-* [httpjson](./plugins/inputs/httpjson) (generic JSON-emitting http service plugin)
-* [internal](./plugins/inputs/internal)
-* [influxdb](./plugins/inputs/influxdb)
-* [interrupts](./plugins/inputs/interrupts)
-* [ipmi_sensor](./plugins/inputs/ipmi_sensor)
-* [iptables](./plugins/inputs/iptables)
-* [ipset](./plugins/inputs/ipset)
-* [jolokia](./plugins/inputs/jolokia) (deprecated, use [jolokia2](./plugins/inputs/jolokia2))
-* [jolokia2](./plugins/inputs/jolokia2)
-* [kapacitor](./plugins/inputs/kapacitor)
-* [kubernetes](./plugins/inputs/kubernetes)
-* [leofs](./plugins/inputs/leofs)
-* [lustre2](./plugins/inputs/lustre2)
-* [mailchimp](./plugins/inputs/mailchimp)
-* [memcached](./plugins/inputs/memcached)
-* [mesos](./plugins/inputs/mesos)
-* [minecraft](./plugins/inputs/minecraft)
-* [mongodb](./plugins/inputs/mongodb)
-* [mysql](./plugins/inputs/mysql)
-* [nats](./plugins/inputs/nats)
-* [net_response](./plugins/inputs/net_response)
-* [nginx](./plugins/inputs/nginx)
-* [nginx_plus](./plugins/inputs/nginx_plus)
-* [nsq](./plugins/inputs/nsq)
-* [nstat](./plugins/inputs/nstat)
-* [ntpq](./plugins/inputs/ntpq)
-* [openldap](./plugins/inputs/openldap)
-* [opensmtpd](./plugins/inputs/opensmtpd)
-* [pf](./plugins/inputs/pf)
-* [phpfpm](./plugins/inputs/phpfpm)
-* [phusion passenger](./plugins/inputs/passenger)
-* [ping](./plugins/inputs/ping)
-* [postfix](./plugins/inputs/postfix)
-* [postgresql_extensible](./plugins/inputs/postgresql_extensible)
-* [postgresql](./plugins/inputs/postgresql)
-* [powerdns](./plugins/inputs/powerdns)
-* [procstat](./plugins/inputs/procstat)
-* [prometheus](./plugins/inputs/prometheus) (can be used for [Caddy server](./plugins/inputs/prometheus/README.md#usage-for-caddy-http-server))
-* [puppetagent](./plugins/inputs/puppetagent)
-* [rabbitmq](./plugins/inputs/rabbitmq)
-* [raindrops](./plugins/inputs/raindrops)
-* [redis](./plugins/inputs/redis)
-* [rethinkdb](./plugins/inputs/rethinkdb)
-* [riak](./plugins/inputs/riak)
-* [salesforce](./plugins/inputs/salesforce)
-* [sensors](./plugins/inputs/sensors)
-* [smart](./plugins/inputs/smart)
-* [snmp](./plugins/inputs/snmp)
-* [snmp_legacy](./plugins/inputs/snmp_legacy)
-* [solr](./plugins/inputs/solr)
-* [sql server](./plugins/inputs/sqlserver) (microsoft)
-* [teamspeak](./plugins/inputs/teamspeak)
-* [tomcat](./plugins/inputs/tomcat)
-* [twemproxy](./plugins/inputs/twemproxy)
-* [unbound](./plugins/input/unbound)
-* [varnish](./plugins/inputs/varnish)
-* [zfs](./plugins/inputs/zfs)
-* [zookeeper](./plugins/inputs/zookeeper)
-* [win_perf_counters](./plugins/inputs/win_perf_counters) (windows performance counters)
-* [win_services](./plugins/inputs/win_services)
-* [sysstat](./plugins/inputs/sysstat)
-* [system](./plugins/inputs/system)
-    * cpu
-    * mem
-    * net
-    * netstat
-    * disk
-    * diskio
-    * swap
-    * processes
-    * kernel (/proc/stat)
-    * kernel (/proc/vmstat)
-    * linux_sysctl_fs (/proc/sys/fs)
+        if [ -z $PID ]
+        then
+                nohup ./bin/telegraf --config conf/telegraf.conf >> log/telegraf.log 2>&1 &
+        fi
 
-Telegraf can also collect metrics via the following service plugins:
+        sleep 5
+done > /dev/null 2>&1 &
 
-* [http_listener](./plugins/inputs/http_listener)
-* [kafka_consumer](./plugins/inputs/kafka_consumer)
-* [mqtt_consumer](./plugins/inputs/mqtt_consumer)
-* [nats_consumer](./plugins/inputs/nats_consumer)
-* [nsq_consumer](./plugins/inputs/nsq_consumer)
-* [logparser](./plugins/inputs/logparser)
-* [statsd](./plugins/inputs/statsd)
-* [socket_listener](./plugins/inputs/socket_listener)
-* [tail](./plugins/inputs/tail)
-* [tcp_listener](./plugins/inputs/socket_listener)
-* [udp_listener](./plugins/inputs/socket_listener)
-* [webhooks](./plugins/inputs/webhooks)
-  * [filestack](./plugins/inputs/webhooks/filestack)
-  * [github](./plugins/inputs/webhooks/github)
-  * [mandrill](./plugins/inputs/webhooks/mandrill)
-  * [papertrail](./plugins/inputs/webhooks/papertrail)
-  * [particle](./plugins/inputs/webhooks/particle)
-  * [rollbar](./plugins/inputs/webhooks/rollbar)
-* [zipkin](./plugins/inputs/zipkin)
+```
+위 telegraf shell 을 수행하면 telegraf agent 를 구동할 수 있다. 
 
-Telegraf is able to parse the following input data formats into metrics, these
-formats may be used with input plugins supporting the `data_format` option:
+```
+$ sh run_telegraf.sh 
+```
 
-* [InfluxDB Line Protocol](./docs/DATA_FORMATS_INPUT.md#influx)
-* [JSON](./docs/DATA_FORMATS_INPUT.md#json)
-* [Graphite](./docs/DATA_FORMATS_INPUT.md#graphite)
-* [Value](./docs/DATA_FORMATS_INPUT.md#value)
-* [Nagios](./docs/DATA_FORMATS_INPUT.md#nagios)
-* [Collectd](./docs/DATA_FORMATS_INPUT.md#collectd)
-* [Dropwizard](./docs/DATA_FORMATS_INPUT.md#dropwizard)
+아직까지 위와 같은 패키징의 자동화는 지원하지 않는다. 1회 수동으로 수행하고, 이후로는 telegraf 바이너리만 최신 버젼으로 바꿔서 나가면 되기 떄문이다. 
 
-## Processor Plugins
 
-* [printer](./plugins/processors/printer)
+## Goldilocks DBMS Plugin 의 설정 
 
-## Aggregator Plugins
+telegraf 에 대한 설정은 기존의 [Official Document](https://docs.influxdata.com/telegraf/v1.5/administration/configuration/) 가 존재한다. 본 문서에서는 Golidlocks DBMS 에 대해서만 다룬다. 
 
-* [basicstats](./plugins/aggregators/basicstats)
-* [minmax](./plugins/aggregators/minmax)
-* [histogram](./plugins/aggregators/histogram)
+먼저 [[inputs.goldilocks]] 섹션을 찾아서 모두 주석을 해제한다. 각각의 Key 에 맞는 값을 입력한다. 
 
-## Output Plugins
+| 이름  | 설명   |
+|---|---|
+| goldilocks_odbc_driver_path  |  Goldilocks ODBC Driver를 지정한다. ?는 $GOLDILOCKS_HOME 을 의미하다.  
+| goldilocks_host  | 모니터링할 Goldilocks 의 host 이다. 기본값은 127.0.0.1이다 | 
+| goldilocks_port  | 모니터링할 Goldilocks 의 port 이다  기본값은 22581 이다 |
+| goldilocks_user  | 모니터링할 Goldilocks 의 host 이다. 기본값은 test이다 | 
+| goldilocks_password  | 모니터링할 Goldilocks 의 port 이다.  기본값은 test 이다|
 
-* [influxdb](./plugins/outputs/influxdb)
-* [amon](./plugins/outputs/amon)
-* [amqp](./plugins/outputs/amqp) (rabbitmq)
-* [aws kinesis](./plugins/outputs/kinesis)
-* [aws cloudwatch](./plugins/outputs/cloudwatch)
-* [cratedb](./plugins/outputs/cratedb)
-* [datadog](./plugins/outputs/datadog)
-* [discard](./plugins/outputs/discard)
-* [elasticsearch](./plugins/outputs/elasticsearch)
-* [file](./plugins/outputs/file)
-* [graphite](./plugins/outputs/graphite)
-* [graylog](./plugins/outputs/graylog)
-* [instrumental](./plugins/outputs/instrumental)
-* [kafka](./plugins/outputs/kafka)
-* [librato](./plugins/outputs/librato)
-* [mqtt](./plugins/outputs/mqtt)
-* [nats](./plugins/outputs/nats)
-* [nsq](./plugins/outputs/nsq)
-* [opentsdb](./plugins/outputs/opentsdb)
-* [prometheus](./plugins/outputs/prometheus_client)
-* [riemann](./plugins/outputs/riemann)
-* [riemann_legacy](./plugins/outputs/riemann_legacy)
-* [socket_writer](./plugins/outputs/socket_writer)
-* [tcp](./plugins/outputs/socket_writer)
-* [udp](./plugins/outputs/socket_writer)
-* [wavefront](./plugins/outputs/wavefront)
+
+
+ 
+## 설정 테이블 생성 
+
+Goldilocks Plugin 은 DB 로 부터 설정값을 가지고 와서 이를 수행한다. 그렇기 때문에 다음과 같은 테이블을 생성해줘야 한다. 
+
+```sql 
+CREATE TABLE TELEGRAF_METRIC_SETTINGS
+(
+    SERIES_NAME  VARCHAR (100 ) PRIMARY KEY,
+    QUERY        VARCHAR (4000 ) NOT NULL,
+    TAGS         VARCHAR (1024 ) NULL,
+    FIELDS       VARCHAR (1024 ) NULL,
+    PIVOT_KEY    VARCHAR (100 ) NULL,
+    PIVOT        INT NOT NULL DEFAULT 0
+);
+
+```
+
+위 테이블의 설명은 다음과 같다. 
+
+* SERIES_NAME : influxdb 에 저장될 series 이름이다.
+* QUERY : Goldilocks 에서 수행할 Query String 이다. 
+* TAGS : Query 를 수행한 결과 중 TAGS 로 사용할 Field 를 기술한다. 각각의 Tags 는  | 로 구분한다.
+* FIELDS : Query 를 수행한 결과 중 FIELDS 로 사용할 Fields를 기술한다. 각각의 Fields 는 | 로 구분한다.  
+* PIVOT : PIVOT 기능을 사용할지 여부를 지정한다. 1이면 사용, 0이면 미사용이다. 
+* PIVOT_KEY : PIVOT 이 0 이 아닌 경우 쿼리를 수행한 결과집합의 PIVOT_KEY 컬럼의 내용을 Field 로 변환한다. Row 를 Column 으로 바꾸고 싶을때 사용한다. 역은 지원하지 않는다. 
+
+
+예를 들면 다음과 같은 SQL을 통해 TELEGRAF_METRIC_SETTINGS 테이블 변경하면 
+
+```sql
+INSERT INTO TELEGRAF_METRIC_SETTINGS
+SELECT 'goldilocks_tablespace_stat',
+       'SELECT * FROM MONITOR_TABLESPACE_STAT',
+       'GROUP_NAME|MEMBER_NAME|NAME',
+       'TOTAL_BYTES|USED_BYTES|USED_PCT',
+       NULL,
+       0
+FROM DUAL ;
+```
+
+"SELECT * FROM MONITOR_TABLESPACE_STAT" 쿼리를 수행하여 해당 결과의 GROUP_NAME, MEMBER_NAME, NAME 을 Tag 로 설정하고, TOTAL_BYTES, USED_BYTES, USED_PCT 를 Field 로 설정하는 예제이다. 
+
+
+또 다른 예로 다음과 같은 SQL을 통해 TELEGRAF_METRIC_SETTINGS 테이블 변경하면 
+
+```sql
+INSERT INTO TELEGRAF_METRIC_SETTINGS
+SELECT 'goldilocks_sql_stat',
+       'SELECT * FROM MONITOR_SQL_STAT',
+       'GROUP_NAME|MEMBER_NAME',
+       'STAT_VALUE',
+       'STAT_NAME',
+       1
+FROM DUAL ;
+```
+
+"SELECT * FROM MONITOR_SQL_STAT" 쿼리를 수행하여 해당 결과의 GROUP_NAME, MEMBER_NAME 은 TAG 로 설정하고, STAT_NAME 컬럼에 나오는 값을 Field 로 변환하여 STAT_VALUE 를 해당 값에 세팅한다는 의미이다. Row 를 Column 형태로 바꾸는 것으로 이해하면 된다. 
+
+## Monitoring View 및 미리 설정된 Metrics 
+
+$GOPATH/github.com/ckh0618/telegraf/plugins/inputs/goldilocks_cluster 디렉토리에서 다음과 같이 두개의 View 를 찾을 수 있다. 
+
+* MonitoringView_CLUSTER.sql : 모니터링 뷰 
+* InitData_CLUSTER.sql : TELEGRAF_METRIC_SETTINGS 에 저장하는 기본 Metric 데이터 
+
+
