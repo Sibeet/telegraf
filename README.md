@@ -22,13 +22,13 @@ Goldilock DBMS 를 telegraf 로 모니터링 하기 위해서는 이 저장소�
 1. golang이 설치되었고 적당한 $GOPATH 환경 변수가 세팅되어있는지 확인한다. 그리고 본 저장소를 통해 check out 받는다. 
 
 ```
-$ go get github.com/ckh0618/telegraf
+$ go get github.com/Sibeet/telegraf
 ```
 
-2. 부모디렉토리 이름을 ckh0618 이 아니라 influxdata 로 바꾼다. 이는 telegraf 내부 코드에서 internal package 를 import 하기 때문이다. 아래와 같이 바꾸지 않으면 빌드 오류가 발생한다. 
+2. 부모디렉토리 이름을 Sibeet 이 아니라 influxdata 로 바꾼다. 이는 telegraf 내부 코드에서 internal package 를 import 하기 때문이다. 아래와 같이 바꾸지 않으면 빌드 오류가 발생한다. 
 
 ```
-$ mv $GOPATH/src/github.com/ckh0618 $GOPATH/src/github.com/influxdata
+$ mv $GOPATH/src/github.com/Sibeet $GOPATH/src/github.com/influxdata
 ```
 3. 빌드한다. 
 
