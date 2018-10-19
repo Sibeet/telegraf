@@ -75,6 +75,10 @@ func (m *Goldilocks) Gather(acc telegraf.Accumulator) error {
 		return nil
 	}
 
+	if connectionString == "" {
+		return fmt.Errorf("ConnectionString is empty")
+	}
+
 	// Loop through each server and collect metrics
 	wg.Add(1)
 	go func(s string) {
@@ -108,10 +112,13 @@ func (m *Goldilocks) runSQL(acc telegraf.Accumulator, db *sql.DB, clusterMode in
 
 			for _, v := range r {
 				for _, v2 := range element.Tags {
-					if v2 == "" {
-
-						fmt.Println("Got Error . ", element.SeriesName)
+					if value, ok := v[v2].(string); ok {
+						tags[v2] = value
+					} else {
+						fmt.Printf("[%s:%d] tag key [%s] not in metrics series(%s)\n", m.Host, m.Port, v2, element.SeriesName)
+						continue
 					}
+
 					tags[v2] = v[v2].(string)
 				}
 
@@ -126,15 +133,22 @@ func (m *Goldilocks) runSQL(acc telegraf.Accumulator, db *sql.DB, clusterMode in
 
 			for _, v := range r {
 				for _, v2 := range element.Tags {
-
-					if v2 == "" {
-						fmt.Println("Got Error . ", element.SeriesName)
+					if value, ok := v[v2].(string); ok {
+						tags[v2] = value
+					} else {
+						fmt.Printf("[%s:%d] tag key [%s] not in metrics series(%s)\n", m.Host, m.Port, v2, element.SeriesName)
+						continue
 					}
-					tags[v2] = v[v2].(string)
 				}
 
 				for _, v2 := range element.Fields {
-					fields[v2] = v[v2]
+					if value, ok := v[v2].(interface{}); ok {
+						fields[v2] = value
+					} else {
+						fmt.Printf("[%s:%d] field key [%s] not in metrics or value is null, series(%s)\n", m.Host, m.Port, v2, element.SeriesName)
+						continue
+					}
+
 				}
 				acc.AddFields(sSeriesName, fields, tags)
 
@@ -276,7 +290,7 @@ func (m *Goldilocks) gatherServer(serv string, acc telegraf.Accumulator) error {
 
 	db, err := sql.Open("odbc", serv)
 	if err != nil {
-		return err
+		return fmt.Errorf("[%s:%d] %s", m.Host, m.Port, err.Error())
 	}
 	defer db.Close()
 
@@ -284,12 +298,12 @@ func (m *Goldilocks) gatherServer(serv string, acc telegraf.Accumulator) error {
 
 	err = m.getConfig(db)
 	if err != nil {
-		return err
+		return fmt.Errorf("[%s:%d] %s", m.Host, m.Port, err.Error())
 	}
 
 	err = m.runSQL(acc, db, sClusterMode)
 	if err != nil {
-		return err
+		return fmt.Errorf("[%s:%d] %s", m.Host, m.Port, err.Error())
 	}
 
 	return nil

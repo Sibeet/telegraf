@@ -27,3 +27,10 @@ Metrics are array of inputs.goldilocks.elements sections. Each section is consis
 * fields : fields lists ( should be column name in result set )
 * pivot : if you want to transpose data rows to columns, then true 
 * pivot_key : key for pivoting
+
+### How to use
+
+Modifying recreate.sh:54~
+
+like 'rec_goldilocks sys gliese GOLDILOCKS MATCHING DUMMY DUMMY'
+Add By node
